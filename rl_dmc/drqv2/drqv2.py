@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from torch.cuda.amp import GradScaler, autocast
 
 import utils
+import kornia
 
 
 class RandomShiftsAug(nn.Module):
@@ -35,6 +36,19 @@ class RandomShiftsAug(nn.Module):
 
         grid = base_grid + shift
         return F.grid_sample(x, grid, padding_mode="zeros", align_corners=False)
+
+
+class RandomFlipAug(nn.Module):
+    def __init__(self, p=0.1):
+        super().__init__()
+        self.p = p
+
+    def forward(self, x):
+        if torch.rand(1) < 0.5:
+            aug = kornia.augmentation.RandomHorizontalFlip(p=self.p)
+        else:
+            aug = kornia.augmentation.RandomVerticalFlip(p=self.p)
+        return aug(x)
 
 
 class Encoder(nn.Module):
@@ -156,6 +170,7 @@ class DrQV2Agent:
         encoder_hidden_dim,
         encoder_out_dim,
         mixed_precision,
+        data_aug
     ):
         self.device = device
         self.critic_target_tau = critic_target_tau
@@ -191,7 +206,19 @@ class DrQV2Agent:
         self.mixed_precision = mixed_precision
 
         # data augmentation
-        self.aug = RandomShiftsAug(pad=4)
+        self.data_aug = data_aug
+        if self.data_aug == 'default':
+            self.aug = nn.Sequential(RandomShiftsAug(pad=4))
+        elif self.data_aug == 'flip':
+            self.aug = nn.Sequential(RandomFlipAug(),
+                                     RandomShiftsAug(pad=4))
+        elif self.data_aug == 'rot':
+            self.aug = nn.Sequential(kornia.augmentation.RandomRotation(degrees=180),
+                                     RandomShiftsAug(pad=4))
+        elif self.data_aug == 'flip_rot':
+            self.aug = nn.Sequential(RandomFlipAug(),
+                                     kornia.augmentation.RandomRotation(degrees=180),
+                                     RandomShiftsAug(pad=4))
 
         self.train()
         self.critic_target.train()

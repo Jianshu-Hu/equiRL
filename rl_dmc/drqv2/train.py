@@ -34,17 +34,31 @@ def make_agent(obs_spec, action_spec, task, cfg):
     cfg.obs_shape = obs_spec.shape
     cfg.action_shape = action_spec.shape
     if "Equi" in cfg._target_:
-        if "reacher" in task:
-            gspace = gspaces.flipRot2dOnR2(N=2)
+        if cfg.group == 'default':
+            if "reacher" in task:
+                gspace = gspaces.flipRot2dOnR2(N=2)
+                print('Use default group type: flip and rotation with N=2')
 
-        elif any(t in task for t in ["acrobot", "pendulum", "cartpole", "cup"]):
+            elif any(t in task for t in ["acrobot", "pendulum", "cartpole", "cup"]):
+                gspace = gspaces.flip2dOnR2()
+                print(f'Use default group type: flip')
+
+        elif cfg.group == 'flip':
             gspace = gspaces.flip2dOnR2()
+            print('Use specified group type: flip')
+        elif cfg.group == 'rot':
+            gspace = gspaces.Rot2dOnR2(N=cfg.num_group_action)
+            print(f'Use specified group type: rotation with N={cfg.num_group_action}')
+        elif cfg.group == 'flip_rot':
+            gspace = gspaces.flipRot2dOnR2(N=cfg.num_group_action)
+            print(f'Use specified group type: flip and rotation with N={cfg.num_group_action}')
+        else:
+            raise ValueError('Unknown group')
 
         return hydra.utils.instantiate(
             cfg,
             gspace=gspace,
         )
-
     else:
         return hydra.utils.instantiate(cfg)
 
