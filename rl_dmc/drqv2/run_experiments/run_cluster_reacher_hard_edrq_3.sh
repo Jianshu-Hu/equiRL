@@ -8,4 +8,4 @@ tag=reacher_hard_flipr2_edrq_shift
 seed=3
 
 echo "start running $tag with seed $seed"
-python train.py task=reacher_hard agent._target_=eq_drqv2.EquiDrQV2Agent agent.encoder_hidden_dim=16 agent.encoder_out_dim=16 agent.hidden_dim=512 experiment=$tag seed=$seed replay_buffer_num_workers=1
+python train.py task=reacher_hard num_train_frames=1100000 agent._target_=eq_drqv2.EquiDrQV2Agent agent.encoder_hidden_dim=16 agent.encoder_out_dim=16 agent.hidden_dim=512 experiment=$tag seed=$seed replay_buffer_num_workers=0

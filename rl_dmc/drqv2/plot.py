@@ -65,5 +65,5 @@ def plot_several_folders(prefix, folders, action_repeat, label_list=[], plot_or_
 
 prefix = 'reacher_hard/'
 action_repeat = 2
-folders_1 = ['drq_shift']
+folders_1 = ['drq_shift', 'drq_rot', 'drq_flip', 'drq_flip_rot', 'flipr2_edrq_shift']
 plot_several_folders(prefix, folders_1, action_repeat, title='reacher_hard_drq')

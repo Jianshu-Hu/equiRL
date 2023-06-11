@@ -4,9 +4,6 @@ defaults:
   - override hydra/launcher: submitit_local
 
 ############# additional #############
-# group type
-group: default #flip, rot, flip_rot
-num_group_action: 2
 # additional data augmentation
 data_aug: default #flip, rot, flip_rot
 ############# additional #############
