@@ -39,45 +39,67 @@ class RandomShiftsAug(nn.Module):
 
 
 class RandomFlipAug(nn.Module):
-    def __init__(self, p=0.1):
+    def __init__(self, task_name, p=0.1):
         super().__init__()
         self.p = p
+        self.task_name = task_name
 
     def forward(self, x):
-        if torch.rand(1) < 0.5:
-            aug = kornia.augmentation.RandomHorizontalFlip(p=self.p)
+        aug_x = x.clone()
+        if "reacher" in self.task_name:
+            if torch.rand(1) < 0.5:
+                aug = kornia.augmentation.RandomHorizontalFlip(p=1)
+            else:
+                aug = kornia.augmentation.RandomVerticalFlip(p=1)
+        elif any(t in self.task_name for t in ["acrobot", "pendulum", "cartpole", "cup"]):
+            aug = kornia.augmentation.RandomHorizontalFlip(p=1)
         else:
-            aug = kornia.augmentation.RandomVerticalFlip(p=self.p)
-        return aug(x)
+            raise ValueError('Not implemented equivariant flip augmentation')
+
+        # the mask for the image to be transformed
+        mask = torch.rand(x.size(0)).to(x.device)
+        mask = torch.where(mask < self.p, 1, 0)
+        mask = (mask == 1)
+        aug_x[mask, :, :, :] = aug(x[mask, :, :, :])
+
+        return aug_x, mask
 
 
 class Encoder(nn.Module):
-    def __init__(self, obs_shape, hidden_dim, out_dim):
+    def __init__(self, obs_shape, hidden_dim, out_dim, pooling):
         super().__init__()
 
         assert len(obs_shape) == 3
-        # self.repr_dim = out_dim * 35 * 35
-        self.repr_dim = out_dim * 7 * 7
+        if pooling:
+            self.repr_dim = out_dim * 35 * 35
 
-        self.convnet = nn.Sequential(
-            # 85x85
-            nn.Conv2d(obs_shape[0], hidden_dim, 3, stride=2),
-            nn.ReLU(),
-            # 42x42
-            nn.Conv2d(hidden_dim, hidden_dim, 3, stride=1),
-            nn.ReLU(),
-            # 40x40
-            nn.MaxPool2d(2),
-            # 20x20
-            nn.Conv2d(hidden_dim, hidden_dim, 3, stride=1),
-            nn.ReLU(),
-            # 18x18
-            nn.MaxPool2d(2),
-            # 9x9
-            nn.Conv2d(hidden_dim, out_dim, 3, stride=1),
-            nn.ReLU(),
-            # 7x7
-        )
+            self.convnet = nn.Sequential(nn.Conv2d(obs_shape[0], hidden_dim, 3, stride=2),
+                                         nn.ReLU(), nn.Conv2d(hidden_dim, hidden_dim, 3, stride=1),
+                                         nn.ReLU(), nn.Conv2d(hidden_dim, hidden_dim, 3, stride=1),
+                                         nn.ReLU(), nn.Conv2d(hidden_dim, hidden_dim, 3, stride=1),
+                                         nn.ReLU())
+        else:
+            self.repr_dim = out_dim * 7 * 7
+
+            self.convnet = nn.Sequential(
+                # 85x85
+                nn.Conv2d(obs_shape[0], hidden_dim, 3, stride=2),
+                nn.ReLU(),
+                # 42x42
+                nn.Conv2d(hidden_dim, hidden_dim, 3, stride=1),
+                nn.ReLU(),
+                # 40x40
+                nn.MaxPool2d(2),
+                # 20x20
+                nn.Conv2d(hidden_dim, hidden_dim, 3, stride=1),
+                nn.ReLU(),
+                # 18x18
+                nn.MaxPool2d(2),
+                # 9x9
+                nn.Conv2d(hidden_dim, out_dim, 3, stride=1),
+                nn.ReLU(),
+                # 7x7
+            )
 
         self.apply(utils.weight_init)
 
@@ -170,7 +192,9 @@ class DrQV2Agent:
         encoder_hidden_dim,
         encoder_out_dim,
         mixed_precision,
-        data_aug
+        data_aug,
+        task_name,
+        pooling
     ):
         self.device = device
         self.critic_target_tau = critic_target_tau
@@ -181,7 +205,7 @@ class DrQV2Agent:
         self.stddev_clip = stddev_clip
 
         # models
-        self.encoder = Encoder(obs_shape, encoder_hidden_dim, encoder_out_dim).to(
+        self.encoder = Encoder(obs_shape, encoder_hidden_dim, encoder_out_dim, pooling).to(
             device
         )
         self.actor = Actor(
@@ -207,18 +231,13 @@ class DrQV2Agent:
 
         # data augmentation
         self.data_aug = data_aug
-        if self.data_aug == 'default':
-            self.aug = nn.Sequential(RandomShiftsAug(pad=4))
-        elif self.data_aug == 'flip':
-            self.aug = nn.Sequential(RandomFlipAug(),
-                                     RandomShiftsAug(pad=4))
-        elif self.data_aug == 'rot':
-            self.aug = nn.Sequential(kornia.augmentation.RandomRotation(degrees=180),
-                                     RandomShiftsAug(pad=4))
-        elif self.data_aug == 'flip_rot':
-            self.aug = nn.Sequential(RandomFlipAug(),
-                                     kornia.augmentation.RandomRotation(degrees=180),
-                                     RandomShiftsAug(pad=4))
+        self.task_name = task_name
+        self.shift_aug = RandomShiftsAug(pad=4)
+        self.flip_aug = RandomFlipAug(task_name=self.task_name, p=0.1)
+        self.rot_aug = kornia.augmentation.RandomRotation(degrees=180)
+
+        # encoder
+        self.pooling = pooling
 
         self.train()
         self.critic_target.train()
@@ -322,8 +341,30 @@ class DrQV2Agent:
         obs, action, reward, discount, next_obs = utils.to_torch(batch, self.device)
 
         # augment
-        obs = self.aug(obs.float())
-        next_obs = self.aug(next_obs.float())
+        # current this equi-data aug is only implemented for reacher
+        if self.data_aug == 'default':
+            obs = self.shift_aug(obs.float())
+            next_obs = self.shift_aug(next_obs.float())
+        elif self.data_aug == 'rot':
+            obs = self.shift_aug(self.rot_aug(obs.float()))
+            next_obs = self.shift_aug(self.rot_aug(next_obs.float()))
+        elif self.data_aug == 'flip':
+            obs, mask = self.flip_aug(obs.float())
+            obs = self.shift_aug(obs)
+            if "cup" in self.task_name:
+                # for cup catch, the action for y-axis is invaraint under Horizontal flip while
+                # the action for x-axis is equivariant
+                action[mask, 0] = -action[mask, 0]
+            else:
+                action[mask, :] = -action[mask, :]
+            next_obs, _ = self.flip_aug(next_obs.float())
+            next_obs = self.shift_aug(next_obs)
+        elif self.data_aug == 'flip_rot':
+            obs, mask = self.flip_aug(obs.float())
+            obs = self.shift_aug(self.rot_aug(obs))
+            action[mask, :] = -action[mask, :]
+            next_obs, _ = self.flip_aug(next_obs.float())
+            next_obs = self.shift_aug(self.rot_aug(next_obs.float()))
         # encode
         obs = self.encoder(obs)
         with torch.no_grad():

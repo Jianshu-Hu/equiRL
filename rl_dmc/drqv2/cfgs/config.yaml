@@ -6,6 +6,8 @@ defaults:
 ############# additional #############
 # additional data augmentation
 data_aug: default #flip, rot, flip_rot
+# with/without pooling layer in encoder of drqv2
+pooling: false
 ############# additional #############
 
 # task settings
@@ -55,6 +57,8 @@ agent:
   encoder_out_dim: 32
   mixed_precision: ${mixed_precision}
   data_aug: ${data_aug}
+  task_name: ${task_name}
+  pooling: ${pooling}
 
 hydra:
   run:

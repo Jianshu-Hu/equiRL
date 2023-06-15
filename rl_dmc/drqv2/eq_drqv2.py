@@ -388,8 +388,7 @@ class EquiDrQV2Agent:
         encoder_hidden_dim,
         encoder_out_dim,
         gspace,
-        mixed_precision,
-        data_aug
+        mixed_precision
     ):
         self.device = device
         self.critic_target_tau = critic_target_tau

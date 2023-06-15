@@ -47,7 +47,13 @@ def make_agent(obs_spec, action_spec, task, cfg):
             gspace=gspace,
         )
     else:
-        return hydra.utils.instantiate(cfg)
+        return hydra.utils.instantiate(
+            cfg,
+            data_aug=cfg.data_aug,
+            task_name=cfg.task_name,
+            pooling=cfg.pooling
+            )
+
 
 
 class Workspace:
