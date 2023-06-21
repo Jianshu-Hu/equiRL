@@ -31,9 +31,9 @@ torch.backends.cudnn.benchmark = True
 
 
 def make_agent(obs_spec, action_spec, task, cfg):
-    cfg.obs_shape = obs_spec.shape
-    cfg.action_shape = action_spec.shape
-    if "Equi" in cfg._target_:
+    cfg.agent.obs_shape = obs_spec.shape
+    cfg.agent.action_shape = action_spec.shape
+    if "Equi" in cfg.agent._target_:
         if "reacher" in task:
             gspace = gspaces.flipRot2dOnR2(N=2)
             print('Use default group type: flip and rotation with N=2')
@@ -43,15 +43,16 @@ def make_agent(obs_spec, action_spec, task, cfg):
             print(f'Use default group type: flip')
 
         return hydra.utils.instantiate(
-            cfg,
+            cfg.agent,
             gspace=gspace,
         )
     else:
         return hydra.utils.instantiate(
-            cfg,
+            cfg.agent,
             data_aug=cfg.data_aug,
             task_name=cfg.task_name,
-            pooling=cfg.pooling
+            pooling=cfg.pooling,
+            aug_K=cfg.aug_K
             )
 
 
@@ -70,7 +71,7 @@ class Workspace:
             self.train_env.observation_spec(),
             self.train_env.action_spec(),
             cfg.task_name,
-            self.cfg.agent,
+            self.cfg,
         )
         self.timer = utils.Timer()
         self._global_step = 0

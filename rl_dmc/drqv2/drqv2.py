@@ -194,7 +194,8 @@ class DrQV2Agent:
         mixed_precision,
         data_aug,
         task_name,
-        pooling
+        pooling,
+        aug_K
     ):
         self.device = device
         self.critic_target_tau = critic_target_tau
@@ -232,6 +233,7 @@ class DrQV2Agent:
         # data augmentation
         self.data_aug = data_aug
         self.task_name = task_name
+        self.aug_K = aug_K
         self.shift_aug = RandomShiftsAug(pad=4)
         self.flip_aug = RandomFlipAug(task_name=self.task_name, p=0.1)
         self.rot_aug = kornia.augmentation.RandomRotation(degrees=180)
@@ -270,29 +272,37 @@ class DrQV2Agent:
     def update_critic(self, obs, action, reward, discount, next_obs, step):
         metrics = dict()
 
+        target_all = []
         with torch.no_grad():
-            stddev = utils.schedule(self.stddev_schedule, step)
-            dist = self.actor(next_obs, stddev)
-            next_action = dist.sample(clip=self.stddev_clip)
-            target_Q1, target_Q2 = self.critic_target(next_obs, next_action)
-            target_V = torch.min(target_Q1, target_Q2)
-            target_Q = reward + (discount * target_V)
+            for k in range(self.aug_K):
+                stddev = utils.schedule(self.stddev_schedule, step)
+                dist = self.actor(next_obs[k], stddev)
+                next_action = dist.sample(clip=self.stddev_clip)
+                target_Q1, target_Q2 = self.critic_target(next_obs[k], next_action)
+                target_V = torch.min(target_Q1, target_Q2)
+                target_Q = reward + (discount * target_V)
+                target_all.append(target_Q)
+            avg_target_Q = sum(target_all)/self.aug_K
 
         # with autocast(enabled=self.mixed_precision):
-        Q1, Q2 = self.critic(obs, action)
-        critic_loss = F.mse_loss(Q1, target_Q) + F.mse_loss(Q2, target_Q)
+        critic_loss_all = []
+        for k in range(self.aug_K):
+            Q1, Q2 = self.critic(obs[k], action[k])
+            critic_loss = F.mse_loss(Q1, avg_target_Q) + F.mse_loss(Q2, avg_target_Q)
+            critic_loss_all.append(critic_loss)
+        avg_critic_loss = sum(critic_loss_all)/self.aug_K
 
         if self.use_tb:
             metrics["critic_target_q"] = target_Q.mean().item()
             metrics["critic_q1"] = Q1.mean().item()
             metrics["critic_q2"] = Q2.mean().item()
-            metrics["critic_loss"] = critic_loss.item()
+            metrics["critic_loss"] = avg_critic_loss.item()
 
         # optimize encoder and critic
         self.encoder_opt.zero_grad(set_to_none=True)
         self.critic_opt.zero_grad(set_to_none=True)
 
-        critic_loss.backward()
+        avg_critic_loss.backward()
         self.critic_opt.step()
         self.encoder_opt.step()
 
@@ -331,17 +341,8 @@ class DrQV2Agent:
 
         return metrics
 
-    def update(self, replay_iter, step):
-        metrics = dict()
-
-        if step % self.update_every_steps != 0:
-            return metrics
-
-        batch = next(replay_iter)
-        obs, action, reward, discount, next_obs = utils.to_torch(batch, self.device)
-
+    def aug(self, obs, action, next_obs):
         # augment
-        # current this equi-data aug is only implemented for reacher
         if self.data_aug == 'default':
             obs = self.shift_aug(obs.float())
             next_obs = self.shift_aug(next_obs.float())
@@ -365,21 +366,39 @@ class DrQV2Agent:
             action[mask, :] = -action[mask, :]
             next_obs, _ = self.flip_aug(next_obs.float())
             next_obs = self.shift_aug(self.rot_aug(next_obs.float()))
-        # encode
-        obs = self.encoder(obs)
-        with torch.no_grad():
-            next_obs = self.encoder(next_obs)
+        return obs, action, next_obs
+
+    def update(self, replay_iter, step):
+        metrics = dict()
+
+        if step % self.update_every_steps != 0:
+            return metrics
+
+        batch = next(replay_iter)
+        obs, action, reward, discount, next_obs = utils.to_torch(batch, self.device)
+
+        # augment
+        obs_all = []
+        action_all = []
+        next_obs_all = []
+        for k in range(self.aug_K):
+            obs_aug, action_aug, next_obs_aug = self.aug(obs.clone(), action.clone(), next_obs.clone())
+            # encoder
+            obs_all.append(self.encoder(obs_aug))
+            action_all.append(action_aug)
+            with torch.no_grad():
+                next_obs_all.append(self.encoder(next_obs_aug))
 
         if self.use_tb:
             metrics["batch_reward"] = reward.mean().item()
 
         # update critic
         metrics.update(
-            self.update_critic(obs, action, reward, discount, next_obs, step)
+            self.update_critic(obs_all, action_all, reward, discount, next_obs_all, step)
         )
 
         # update actor
-        metrics.update(self.update_actor(obs.detach(), step))
+        metrics.update(self.update_actor(obs_all[0].detach(), step))
 
         # update critic target
         utils.soft_update_params(

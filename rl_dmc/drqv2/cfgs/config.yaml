@@ -8,6 +8,8 @@ defaults:
 data_aug: default #flip, rot, flip_rot
 # with/without pooling layer in encoder of drqv2
 pooling: false
+# using the average target with K pairs of augmented samples
+aug_K: 1
 ############# additional #############
 
 # task settings
