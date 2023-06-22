@@ -1,5 +1,7 @@
 .idea
-rl_dmc/drqv2/__pycache__/
+**/__pycache__/
+rl_manipulation/outputs
+rl_manipulation/logs
 rl_dmc/drqv2/outputs
 rl_dmc/drqv2/saved_exps
 rl_dmc/drqv2/exp_local

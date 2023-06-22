@@ -379,12 +379,15 @@ def augmentTransitionSO2(d):
 
 
 def augmentTransitionSE2(d):
-    obs, next_obs, dxy, transform_params = perturb(d.obs[0].copy(),
-                                                   d.next_obs[0].copy(),
+    # obs, next_obs, dxy, transform_params = perturb(d.obs[0].copy(),
+    #                                                d.next_obs[0].copy(),
+    #                                                d.action[1:3].copy())
+    # obs = obs.reshape(1, *obs.shape)
+    # next_obs = next_obs.reshape(1, *next_obs.shape)
+    obs, next_obs, dxy, transform_params = perturb(d.obs.copy(),
+                                                   d.next_obs.copy(),
                                                    d.action[1:3].copy())
-    obs = obs.reshape(1, *obs.shape)
-    next_obs = next_obs.reshape(1, *next_obs.shape)
-    action = d.action.clone()
+    action = d.action.copy()
     action[1] = dxy[0]
     action[2] = dxy[1]
     return ExpertTransition(d.state, obs, action, d.reward, d.next_state,
@@ -392,12 +395,17 @@ def augmentTransitionSE2(d):
 
 
 def augmentTransitionTranslate(d):
-    obs, next_obs, dxy, transform_params = perturb(d.obs[0].copy(),
-                                                   d.next_obs[0].copy(),
+    # obs, next_obs, dxy, transform_params = perturb(d.obs[0].copy(),
+    #                                                d.next_obs[0].copy(),
+    #                                                d.action[1:3].copy(),
+    #                                                set_theta_zero=True)
+    # obs = obs.reshape(1, *obs.shape)
+    # next_obs = next_obs.reshape(1, *next_obs.shape)
+
+    obs, next_obs, dxy, transform_params = perturb(d.obs.copy(),
+                                                   d.next_obs.copy(),
                                                    d.action[1:3].copy(),
                                                    set_theta_zero=True)
-    obs = obs.reshape(1, *obs.shape)
-    next_obs = next_obs.reshape(1, *next_obs.shape)
     return ExpertTransition(d.state, obs, d.action, d.reward, d.next_state,
                             next_obs, d.done, d.step_left, d.expert)
 
@@ -436,6 +444,24 @@ def augmentTransitionCrop(d):
     obs = obs[:, w1:w1 + crop_size, h1:h1 + crop_size]
     next_obs = next_obs[:, w1:w1 + crop_size, h1:h1 + crop_size]
     return ExpertTransition(d.state, obs, d.action, d.reward, d.next_state,
+                            next_obs, d.done, d.step_left, d.expert)
+
+def augmentTransitionHorizontalFlip(d):
+    action = d.action.copy()
+
+    obs = (d.obs[:, :, :: -1]).copy()
+    next_obs = (d.next_obs[:, :, :: -1]).copy()
+    action[1] = -action[1]
+    return ExpertTransition(d.state, obs, action, d.reward, d.next_state,
+                            next_obs, d.done, d.step_left, d.expert)
+
+def augmentTransitionVerticalFlip(d):
+    action = d.action
+
+    obs = (d.obs[:, :: -1, :]).copy()
+    next_obs = (d.next_obs[:, :: -1, :]).copy()
+    action[2] = -action[2]
+    return ExpertTransition(d.state, obs, action, d.reward, d.next_state,
                             next_obs, d.done, d.step_left, d.expert)
 
 def augmentTransitionCropX(d):
@@ -483,6 +509,13 @@ def augmentTransition(d, aug_type):
         return augmentTransitionCropX(d)
     elif aug_type == 'crop_y':
         return augmentTransitionCropY(d)
+    elif aug_type == 'crop_flip':
+        p = np.random.rand(1)
+        if p < 0.2:
+            d = augmentTransitionHorizontalFlip(d)
+        elif p < 0.4:
+            d = augmentTransitionVerticalFlip(d)
+        return augmentTransitionCrop(d)
     else:
         raise NotImplementedError
 

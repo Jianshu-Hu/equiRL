@@ -130,7 +130,7 @@ def train():
         log_dir += '_'
         log_dir += note
 
-    logger = Logger(log_dir, env, 'train', num_processes, max_train_step, gamma, log_sub)
+    logger = Logger(log_dir, env, 'train', num_processes, max_train_step, gamma, seed, log_sub)
     hyper_parameters['model_shape'] = agent.getModelStr()
     logger.saveParameters(hyper_parameters)
 

@@ -95,7 +95,7 @@ def plotEvalCurve(base, step=50000, use_default_cm=False, freq=1000):
             except Exception as e:
                 print(e)
                 continue
-        assert j == 3
+        # assert j == 1
         plotEvalCurveAvg(rs, freq, label=name_map[method] if method in name_map else method,
                          color=color_map[method] if method in color_map else colors[i],
                          linestyle=linestyle_map[method] if method in linestyle_map else '-')
@@ -603,14 +603,14 @@ def plotLoss(base, step):
 
 
 if __name__ == '__main__':
-    base = '/media/dian/hdd/mrun_results/transfer/iclr/equi_vs_cnn'
+    base = '/bigdata/users/jhu/equiRL/rl_manipulation/logs/saved_logs/'
     envs = filter(lambda x: x[0] != '.', get_immediate_subdirectories(base))
     for env in envs:
         plotEvalCurve(os.path.join(base, env), 10000, freq=200)
 
-    base = '/media/dian/hdd/mrun_results/transfer/iclr/view_angle'
-    envs = filter(lambda x: x[0] != '.', get_immediate_subdirectories(base))
-    for env in envs:
-         plotViewAngleCurve(os.path.join(base, env), 10000 if env == 'bowl' else 5000)
+    # base = '/media/dian/hdd/mrun_results/transfer/iclr/view_angle'
+    # envs = filter(lambda x: x[0] != '.', get_immediate_subdirectories(base))
+    # for env in envs:
+    #      plotViewAngleCurve(os.path.join(base, env), 10000 if env == 'bowl' else 5000)
 
 

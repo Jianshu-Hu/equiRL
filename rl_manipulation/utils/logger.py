@@ -25,7 +25,7 @@ class Logger(object):
       - num_envs: Number of environments running concurrently
     '''
 
-    def __init__(self, log_dir, env, mode, num_envs, max_train_step, gamma, log_dir_sub=None):
+    def __init__(self, log_dir, env, mode, num_envs, max_train_step, gamma, seed, log_dir_sub=None):
         # Logging variables
         self.env = env
         self.mode = mode
@@ -37,7 +37,7 @@ class Logger(object):
         timestamp = time.time()
         timestamp = datetime.datetime.fromtimestamp(timestamp)
         if not log_dir_sub:
-            self.base_dir = os.path.join(log_dir, '{}_{}_{}'.format(self.mode, self.env, timestamp.strftime('%Y-%m-%d.%H:%M:%S')))
+            self.base_dir = os.path.join(log_dir, '{}_{}_{}_{}'.format(seed, self.mode, self.env, timestamp.strftime('%Y-%m-%d.%H:%M:%S')))
         else:
             self.base_dir = os.path.join(log_dir, log_dir_sub)
         print('Creating logging session at: {}'.format(self.base_dir))
