@@ -34,19 +34,33 @@ def make_agent(obs_spec, action_spec, task, cfg):
     cfg.agent.obs_shape = obs_spec.shape
     cfg.agent.action_shape = action_spec.shape
     if "Equi" in cfg.agent._target_:
-        if "reacher" in task:
-            gspace = gspaces.flipRot2dOnR2(N=2)
-            print('Use default group type: flip and rotation with N=2')
+        if "Inv" in cfg.agent._target_:
+            # InvEquiDrQv2
+            print('make an InvEqui Agent')
+            return hydra.utils.instantiate(
+                cfg.agent,
+                task_name=cfg.task_name,
+                aug_K=cfg.aug_K,
+                with_decoder=cfg.with_decoder
+            )
+        else:
+            # EquiDrQv2
+            print('make an Equi Agent')
+            if "reacher" in task:
+                gspace = gspaces.flipRot2dOnR2(N=2)
+                print('Use default group type: flip and rotation with N=2')
 
-        elif any(t in task for t in ["acrobot", "pendulum", "cartpole", "cup"]):
-            gspace = gspaces.flip2dOnR2()
-            print(f'Use default group type: flip')
+            elif any(t in task for t in ["acrobot", "pendulum", "cartpole", "cup"]):
+                gspace = gspaces.flip2dOnR2()
+                print(f'Use default group type: flip')
 
-        return hydra.utils.instantiate(
-            cfg.agent,
-            gspace=gspace,
-        )
+            return hydra.utils.instantiate(
+                cfg.agent,
+                gspace=gspace,
+            )
     else:
+        # DrQv2
+        print('make an DrQv2 Agent')
         return hydra.utils.instantiate(
             cfg.agent,
             data_aug=cfg.data_aug,

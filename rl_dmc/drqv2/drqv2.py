@@ -70,8 +70,8 @@ class Encoder(nn.Module):
         super().__init__()
 
         assert len(obs_shape) == 3
-        if pooling:
-            self.repr_dim = out_dim * 35 * 35
+        if not pooling:
+            self.repr_dim = out_dim * 36 * 36
 
             self.convnet = nn.Sequential(nn.Conv2d(obs_shape[0], hidden_dim, 3, stride=2),
                                          nn.ReLU(), nn.Conv2d(hidden_dim, hidden_dim, 3, stride=1),
