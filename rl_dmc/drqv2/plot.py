@@ -77,7 +77,11 @@ folders_4 = ['drq_without_pooling_flip', 'drq_without_pooling_average_2_flip', '
              'drq_without_pooling_average_2_flip_rot',
              'flipr2_edrq_shift']
 
-plot_several_folders(prefix, folders_1, action_repeat, title='reacher_hard_drq')
-plot_several_folders(prefix, folders_2, action_repeat, title='reacher_hard_without_pooling_drq')
-plot_several_folders(prefix, folders_3, action_repeat, title='reacher_hard_without_pooling_average_2_drq')
-plot_several_folders(prefix, folders_4, action_repeat, title='reacher_hard_average_2_for_equi_drq')
+folders_1 = ['flipr2_edrq_shift', 'drq_inv_equi_without_ssl']
+
+# plot_several_folders(prefix, folders_1, action_repeat, title='reacher_hard_drq')
+# plot_several_folders(prefix, folders_2, action_repeat, title='reacher_hard_without_pooling_drq')
+# plot_several_folders(prefix, folders_3, action_repeat, title='reacher_hard_without_pooling_average_2_drq')
+# plot_several_folders(prefix, folders_4, action_repeat, title='reacher_hard_average_2_for_equi_drq')
+
+plot_several_folders(prefix, folders_1, action_repeat, title='reacher_hard_inv_equi_drq')

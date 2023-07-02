@@ -58,7 +58,7 @@ class InvEquiEncoder(torch.nn.Module):
 
         self.block1 = e2nn.SequentialModule(
             #nn.MaskModule(in_type, 29, margin=1),
-            e2nn.R2Conv(in_type, out_type, kernel_size=3, stride=2, padding=1, bias=False),
+            e2nn.R2Conv(in_type, out_type, kernel_size=7, padding=1, bias=False),
             batch_norm,
             nonlinearity
         )
@@ -72,9 +72,12 @@ class InvEquiEncoder(torch.nn.Module):
         nonlinearity = self.get_non_linearity(out_scalar_fields, out_vector_field)
 
         self.block2 = e2nn.SequentialModule(
-            e2nn.R2Conv(in_type, out_type, kernel_size=3, stride=1, padding=1, bias=False),
+            e2nn.R2Conv(in_type, out_type, kernel_size=5, padding=2, bias=False),
             batch_norm,
             nonlinearity
+        )
+        self.pool1 = e2nn.SequentialModule(
+            e2nn.PointwiseAvgPoolAntialiased(out_type, sigma=0.66, stride=2)
         )
 
         # convolution 3
@@ -86,7 +89,7 @@ class InvEquiEncoder(torch.nn.Module):
         nonlinearity = self.get_non_linearity(out_scalar_fields, out_vector_field)
 
         self.block3 = e2nn.SequentialModule(
-            e2nn.R2Conv(in_type, out_type, kernel_size=3, stride=1, padding=1, bias=False),
+            e2nn.R2Conv(in_type, out_type, kernel_size=5, padding=2, bias=False),
             batch_norm,
             nonlinearity
         )
@@ -100,19 +103,51 @@ class InvEquiEncoder(torch.nn.Module):
         nonlinearity = self.get_non_linearity(out_scalar_fields, out_vector_field)
 
         self.block4 = e2nn.SequentialModule(
-            e2nn.R2Conv(in_type, out_type, kernel_size=3, stride=1, padding=1, bias=False),
+            e2nn.R2Conv(in_type, out_type, kernel_size=5, padding=2, bias=False),
+            batch_norm,
+            nonlinearity
+        )
+        self.pool2 = e2nn.SequentialModule(
+            e2nn.PointwiseAvgPoolAntialiased(out_type, sigma=0.66, stride=2)
+        )
+
+        # convolution 5
+        in_type = out_type
+        out_scalar_fields = e2nn.FieldType(self.r2_act, hidden_dim * [self.r2_act.trivial_repr])
+        out_vector_field = e2nn.FieldType(self.r2_act, hidden_dim * [self.r2_act.irrep(1)])
+        out_type = out_scalar_fields + out_vector_field
+        batch_norm = self.get_batch_norm(out_scalar_fields, out_vector_field)
+        nonlinearity = self.get_non_linearity(out_scalar_fields, out_vector_field)
+
+        self.block5 = e2nn.SequentialModule(
+            e2nn.R2Conv(in_type, out_type, kernel_size=5, padding=2, bias=False),
             batch_norm,
             nonlinearity
         )
 
-        # convolution 5 --> out
+        # convolution 6
+        in_type = out_type
+        out_scalar_fields = e2nn.FieldType(self.r2_act, hidden_dim * [self.r2_act.trivial_repr])
+        out_vector_field = e2nn.FieldType(self.r2_act, hidden_dim * [self.r2_act.irrep(1)])
+        out_type = out_scalar_fields + out_vector_field
+        batch_norm = self.get_batch_norm(out_scalar_fields, out_vector_field)
+        nonlinearity = self.get_non_linearity(out_scalar_fields, out_vector_field)
+
+        self.block6 = e2nn.SequentialModule(
+            e2nn.R2Conv(in_type, out_type, kernel_size=3, padding=2, bias=False),
+            batch_norm,
+            nonlinearity
+        )
+        self.pool3 = e2nn.PointwiseAvgPoolAntialiased(out_type, sigma=0.66, stride=1, padding=0)
+
+        # convolution 7 --> out
         # the old output type is the input type to the next layer
         in_type = out_type
         out_scalar_fields = e2nn.FieldType(self.r2_act, out_dim * [self.r2_act.trivial_repr])
         out_vector_field = e2nn.FieldType(self.r2_act, 1 * [self.r2_act.irrep(1)])
         out_type = out_scalar_fields + out_vector_field
 
-        self.block5 = e2nn.SequentialModule(
+        self.block7 = e2nn.SequentialModule(
             e2nn.R2Conv(in_type, out_type, kernel_size=1, padding=0, bias=False),
         )
 
@@ -144,9 +179,14 @@ class InvEquiEncoder(torch.nn.Module):
 
         x = self.block1(x)
         x = self.block2(x)
+        x = self.pool1(x)
         x = self.block3(x)
         x = self.block4(x)
+        x = self.pool2(x)
         x = self.block5(x)
+        x = self.block6(x)
+        x = self.pool3(x)
+        x = self.block7(x)
 
         x = x.tensor.mean(dim=(2, 3))
 
@@ -158,104 +198,13 @@ class InvEquiEncoder(torch.nn.Module):
         return x
 
 
-# class InvEquiDecoder(torch.nn.Module):
-#     def __init__(self, obs_shape, input_size, hidden_size=64):
-#         super().__init__()
-#         self.obs_shape = obs_shape
-#         # convolution 1
-#         self.block1 = torch.nn.Sequential(
-#             torch.nn.Conv2d(input_size, hidden_size, kernel_size=1, padding=0,),
-#             torch.nn.BatchNorm2d(hidden_size),
-#             torch.nn.Dropout2d(0.2),
-#             torch.nn.ReLU()
-#         )
-#
-#         # convolution 2
-#         self.block2 = torch.nn.Sequential(
-#             torch.nn.Conv2d(hidden_size, hidden_size, kernel_size=3, padding=1),
-#             torch.nn.BatchNorm2d(hidden_size),
-#             torch.nn.Dropout2d(0.2),
-#             torch.nn.ReLU()
-#         )
-#
-#         # convolution 3
-#         self.block3 = torch.nn.Sequential(
-#             torch.nn.Conv2d(hidden_size, hidden_size, kernel_size=3, padding=1),
-#             torch.nn.BatchNorm2d(hidden_size),
-#             torch.nn.Dropout2d(0.2),
-#             torch.nn.ReLU()
-#         )
-#
-#         # convolution 4
-#         self.block4 = torch.nn.Sequential(
-#             torch.nn.Conv2d(hidden_size, hidden_size, kernel_size=5, padding=2),
-#             torch.nn.BatchNorm2d(hidden_size),
-#             torch.nn.Dropout2d(0.2),
-#             torch.nn.ReLU()
-#         )
-#
-#         # convolution 5
-#         self.block5 = torch.nn.Sequential(
-#             torch.nn.Conv2d(hidden_size, hidden_size, kernel_size=5, padding=2),
-#             torch.nn.BatchNorm2d(hidden_size),
-#             torch.nn.Dropout2d(0.2),
-#             torch.nn.ReLU()
-#         )
-#
-#         # convolution 6
-#         self.block6 = torch.nn.Sequential(
-#             torch.nn.Conv2d(hidden_size, obs_shape[0], kernel_size=1, padding=0),
-#         )
-#
-#     def get_rotation_matrix(self, v):
-#         rot = torch.stack((
-#             torch.stack((v[:, 0], v[:, 1]), dim=-1),
-#             torch.stack((-v[:, 1], v[:, 0]), dim=-1),
-#             torch.zeros(v.size(0), 2).type_as(v)
-#         ), dim=-1)
-#         return rot
-#
-#     def rot_img(self, x, rot):
-#         grid = F.affine_grid(rot, x.size(), align_corners=False).type_as(x)
-#         x = F.grid_sample(x, grid, align_corners=False)
-#         return x
-#
-#     def forward(self, x: torch.Tensor, v: torch.Tensor):
-#         x = x.unsqueeze(-1).unsqueeze(-1)  # [bz, emb_dim, 1, 1]
-#         x = x.expand(-1, -1, 3, 3)
-#
-#         x = self.block1(x)
-#         x = torch.nn.functional.upsample_bilinear(x, scale_factor=2)
-#         x = self.block2(x)
-#         x = torch.nn.functional.upsample_bilinear(x, scale_factor=2)
-#         x = self.block3(x)
-#         x = torch.nn.functional.upsample_bilinear(x, scale_factor=2)
-#         x = self.block4(x)
-#         x = torch.nn.functional.upsample_bilinear(x, scale_factor=2)
-#         x = self.block5(x)
-#         x = torch.nn.functional.upsample_bilinear(x, scale_factor=2)
-#         x = self.block6(x)
-#         init_index = (96-self.obs_shape[-1])//2
-#         x = x[:, :, init_index:init_index+self.obs_shape[-1], init_index:init_index+self.obs_shape[-1]]
-#         x = torch.sigmoid(x)
-#
-#         rot = self.get_rotation_matrix(v)
-#         x = self.rot_img(x, rot)
-#         return x
-
-class InvEquiDecoder(torch.nn.Module):
+class InvEquiDecoder1(torch.nn.Module):
     def __init__(self, obs_shape, input_size, hidden_size=64):
         super().__init__()
         self.obs_shape = obs_shape
-        self.linear = torch.nn.Sequential(
-            torch.nn.Linear(input_size, hidden_size * 8 * 8),
-            torch.nn.ReLU()
-        )
-        self.hidden_size = hidden_size
-
         # convolution 1
         self.block1 = torch.nn.Sequential(
-            torch.nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=3, stride=2, padding=2),
+            torch.nn.Conv2d(input_size, hidden_size, kernel_size=1, padding=0,),
             torch.nn.BatchNorm2d(hidden_size),
             torch.nn.Dropout2d(0.2),
             torch.nn.ReLU()
@@ -263,7 +212,7 @@ class InvEquiDecoder(torch.nn.Module):
 
         # convolution 2
         self.block2 = torch.nn.Sequential(
-            torch.nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=3, stride=2, padding=1),
+            torch.nn.Conv2d(hidden_size, hidden_size, kernel_size=3, padding=1),
             torch.nn.BatchNorm2d(hidden_size),
             torch.nn.Dropout2d(0.2),
             torch.nn.ReLU()
@@ -271,7 +220,7 @@ class InvEquiDecoder(torch.nn.Module):
 
         # convolution 3
         self.block3 = torch.nn.Sequential(
-            torch.nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=3, stride=2, padding=1),
+            torch.nn.Conv2d(hidden_size, hidden_size, kernel_size=3, padding=1),
             torch.nn.BatchNorm2d(hidden_size),
             torch.nn.Dropout2d(0.2),
             torch.nn.ReLU()
@@ -279,7 +228,7 @@ class InvEquiDecoder(torch.nn.Module):
 
         # convolution 4
         self.block4 = torch.nn.Sequential(
-            torch.nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=3, stride=2, padding=1),
+            torch.nn.Conv2d(hidden_size, hidden_size, kernel_size=5, padding=2),
             torch.nn.BatchNorm2d(hidden_size),
             torch.nn.Dropout2d(0.2),
             torch.nn.ReLU()
@@ -287,6 +236,14 @@ class InvEquiDecoder(torch.nn.Module):
 
         # convolution 5
         self.block5 = torch.nn.Sequential(
+            torch.nn.Conv2d(hidden_size, hidden_size, kernel_size=5, padding=2),
+            torch.nn.BatchNorm2d(hidden_size),
+            torch.nn.Dropout2d(0.2),
+            torch.nn.ReLU()
+        )
+
+        # convolution 6
+        self.block6 = torch.nn.Sequential(
             torch.nn.Conv2d(hidden_size, obs_shape[0], kernel_size=1, padding=0),
         )
 
@@ -303,21 +260,116 @@ class InvEquiDecoder(torch.nn.Module):
         x = F.grid_sample(x, grid, align_corners=False)
         return x
 
-    def forward(self, x: torch.Tensor, v: torch.Tensor):
-        x = self.linear(x)  # [bz, hidden_size*8*8]
-        x = x.view(-1, self.hidden_size, 8, 8)  # [bz, hidden_size, 8, 8]
+    def forward(self, x: torch.Tensor, v: torch.Tensor, rot_img=True):
+        x = x.unsqueeze(-1).unsqueeze(-1)  # [bz, emb_dim, 1, 1]
+        x = x.expand(-1, -1, 3, 3)
+
+        x = self.block1(x)
+        x = torch.nn.functional.upsample_bilinear(x, scale_factor=2)
+        x = self.block2(x)
+        x = torch.nn.functional.upsample_bilinear(x, scale_factor=2)
+        x = self.block3(x)
+        x = torch.nn.functional.upsample_bilinear(x, scale_factor=2)
+        x = self.block4(x)
+        x = torch.nn.functional.upsample_bilinear(x, scale_factor=2)
+        x = self.block5(x)
+        x = torch.nn.functional.upsample_bilinear(x, scale_factor=2)
+        x = self.block6(x)
+        init_index = (96-self.obs_shape[-1])//2
+        x = x[:, :, init_index:init_index+self.obs_shape[-1], init_index:init_index+self.obs_shape[-1]]
+        x = torch.sigmoid(x)
+
+        if rot_img:
+            rot = self.get_rotation_matrix(v)
+            x = self.rot_img(x, rot)
+        return x
+
+
+class InvEquiDecoder2(torch.nn.Module):
+    def __init__(self, obs_shape, input_size, hidden_size=64):
+        super().__init__()
+        self.obs_shape = obs_shape
+        self.linear = torch.nn.Sequential(
+            torch.nn.Linear(input_size, hidden_size * 4 * 4),
+            torch.nn.ReLU()
+        )
+        self.hidden_size = hidden_size
+
+        # convolution 1
+        self.block1 = torch.nn.Sequential(
+            torch.nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=1, stride=2, padding=0),
+            torch.nn.BatchNorm2d(hidden_size),
+            torch.nn.Dropout2d(0.2),
+            torch.nn.ReLU()
+        )
+
+        # convolution 2
+        self.block2 = torch.nn.Sequential(
+            torch.nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=3, stride=2, padding=1),
+            torch.nn.BatchNorm2d(hidden_size),
+            torch.nn.Dropout2d(0.2),
+            torch.nn.ReLU()
+        )
+
+        # convolution 3
+        self.block3 = torch.nn.Sequential(
+            torch.nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=5, stride=2, padding=2),
+            torch.nn.BatchNorm2d(hidden_size),
+            torch.nn.Dropout2d(0.2),
+            torch.nn.ReLU()
+        )
+
+        # convolution 4
+        self.block4 = torch.nn.Sequential(
+            torch.nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=5, stride=2, padding=2),
+            torch.nn.BatchNorm2d(hidden_size),
+            torch.nn.Dropout2d(0.2),
+            torch.nn.ReLU()
+        )
+
+        # convolution 5
+        self.block5 = torch.nn.Sequential(
+            torch.nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=5, stride=2, padding=2),
+            torch.nn.BatchNorm2d(hidden_size),
+            torch.nn.Dropout2d(0.2),
+            torch.nn.ReLU()
+        )
+
+        # convolution 6
+        self.block6 = torch.nn.Sequential(
+            torch.nn.Conv2d(hidden_size, obs_shape[0], kernel_size=1, padding=0),
+        )
+
+    def get_rotation_matrix(self, v):
+        rot = torch.stack((
+            torch.stack((v[:, 0], v[:, 1]), dim=-1),
+            torch.stack((-v[:, 1], v[:, 0]), dim=-1),
+            torch.zeros(v.size(0), 2).type_as(v)
+        ), dim=-1)
+        return rot
+
+    def rot_img(self, x, rot):
+        grid = F.affine_grid(rot, x.size(), align_corners=False).type_as(x)
+        x = F.grid_sample(x, grid, align_corners=False)
+        return x
+
+    def forward(self, x: torch.Tensor, v: torch.Tensor, rot_img=True):
+        x = self.linear(x)  # [bz, hidden_size*4*4]
+        x = x.view(-1, self.hidden_size, 4, 4)  # [bz, hidden_size, 4, 4]
 
         x = self.block1(x)
         x = self.block2(x)
         x = self.block3(x)
         x = self.block4(x)
         x = self.block5(x)
+        x = self.block6(x)
         init_index = (97-self.obs_shape[-1])//2
         x = x[:, :, init_index:init_index+self.obs_shape[-1], init_index:init_index+self.obs_shape[-1]]
         x = torch.sigmoid(x)
 
-        rot = self.get_rotation_matrix(v)
-        x = self.rot_img(x, rot)
+        if rot_img:
+            rot = self.get_rotation_matrix(v)
+            x = self.rot_img(x, rot)
         return x
 
 
@@ -405,7 +457,8 @@ class InvEquiDrQV2Agent:
         mixed_precision,
         task_name,
         aug_K,
-        with_decoder
+        with_decoder,
+        decoder_type
     ):
         self.device = device
         self.critic_target_tau = critic_target_tau
@@ -419,7 +472,11 @@ class InvEquiDrQV2Agent:
         self.encoder = InvEquiEncoder(obs_shape=obs_shape, out_dim=encoder_out_dim, hidden_dim=encoder_hidden_dim).to(
             device
         )
-        self.decoder = InvEquiDecoder(obs_shape=obs_shape, input_size=encoder_out_dim).to(device)
+        if with_decoder:
+            if decoder_type == 1:
+                self.decoder = InvEquiDecoder1(obs_shape=obs_shape, input_size=encoder_out_dim).to(device)
+            elif decoder_type == 2:
+                self.decoder = InvEquiDecoder2(obs_shape=obs_shape, input_size=encoder_out_dim).to(device)
 
         self.actor = Actor(
             self.encoder.repr_dim, action_shape, feature_dim, hidden_dim
@@ -458,12 +515,14 @@ class InvEquiDrQV2Agent:
     def train(self, training=True):
         self.training = training
         self.encoder.train(training)
+        self.decoder.train(training)
         self.actor.train(training)
         self.critic.train(training)
 
     def eval(self):
         self.training = False
         self.encoder.eval()
+        self.decoder.eval()
         self.actor.eval()
         self.critic.eval()
 
@@ -555,12 +614,11 @@ class InvEquiDrQV2Agent:
     def update_encoder_decoder(self, obs):
         metrics = dict()
 
-        output = self.encoder(obs)
-        emb, v = output[:, :self.encoder.out_dim], output[:, self.encoder.out_dim:]
-        # print(v, rot)
+        feature = self.encoder(obs)
+        emb, v = feature[:, :self.encoder.out_dim], feature[:, self.encoder.out_dim:]
         y = self.decoder(emb, v)
 
-        loss = F.mse_loss(y, obs/255.0)
+        loss = torch.nn.functional.mse_loss(y, obs / 255.0)
 
         # optimize encoder and critic
         self.encoder_opt.zero_grad(set_to_none=True)
@@ -597,9 +655,6 @@ class InvEquiDrQV2Agent:
             with torch.no_grad():
                 next_obs_all.append(self.encoder(next_obs_aug))
 
-        # augment the obs, next obs for training the encoder, decoder
-        obs_rot_aug = self.rot_aug(obs.float())
-
         if self.use_tb:
             metrics["batch_reward"] = reward.mean().item()
 
@@ -615,6 +670,9 @@ class InvEquiDrQV2Agent:
         utils.soft_update_params(
             self.critic, self.critic_target, self.critic_target_tau
         )
+
+        # augment the obs for training the encoder, decoder
+        obs_rot_aug = self.rot_aug(obs.float())
 
         if self.with_decoder:
             metrics.update(self.update_encoder_decoder(obs_rot_aug))
