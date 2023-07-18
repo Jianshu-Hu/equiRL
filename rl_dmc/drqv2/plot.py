@@ -77,7 +77,8 @@ folders_4 = ['drq_without_pooling_flip', 'drq_without_pooling_average_2_flip', '
              'drq_without_pooling_average_2_flip_rot',
              'flipr2_edrq_shift']
 
-folders_1 = ['flipr2_edrq_shift', 'drq_inv_equi_without_ssl']
+folders_1 = ['drq_without_pooling_shift', 'drq_inv_equi_without_decoder', 'drq_inv_equi_with_decoder',
+             'drq_inv_equi_with_decoder_detach_encoder']
 
 # plot_several_folders(prefix, folders_1, action_repeat, title='reacher_hard_drq')
 # plot_several_folders(prefix, folders_2, action_repeat, title='reacher_hard_without_pooling_drq')
@@ -85,3 +86,13 @@ folders_1 = ['flipr2_edrq_shift', 'drq_inv_equi_without_ssl']
 # plot_several_folders(prefix, folders_4, action_repeat, title='reacher_hard_average_2_for_equi_drq')
 
 plot_several_folders(prefix, folders_1, action_repeat, title='reacher_hard_inv_equi_drq')
+
+prefix = 'cheetah_run/'
+action_repeat = 2
+folders_1 = ['drq_shift_batch_128', 'drq_inv_equi_without_decoder', 'drq_inv_equi_with_decoder', 'drq_inv_equi_with_decoder_detach_encoder']
+plot_several_folders(prefix, folders_1, action_repeat, title='cheetah_run_inv_equi_drq')
+
+prefix = 'acrobot_swingup/'
+action_repeat = 2
+folders_1 = ['drq_shift', 'drq_inv_equi_without_decoder']
+plot_several_folders(prefix, folders_1, action_repeat, title='acrobot_swingup_inv_equi_drq')

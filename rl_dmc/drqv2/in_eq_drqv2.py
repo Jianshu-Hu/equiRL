@@ -4,9 +4,11 @@ import torch.nn.functional as F
 from torch.cuda.amp import GradScaler, autocast
 import utils
 import kornia
+import numpy as np
 
 from e2cnn import gspaces
 from e2cnn import nn as e2nn
+
 
 
 class RandomShiftsAug(nn.Module):
@@ -247,19 +249,6 @@ class InvEquiDecoder1(torch.nn.Module):
             torch.nn.Conv2d(hidden_size, obs_shape[0], kernel_size=1, padding=0),
         )
 
-    def get_rotation_matrix(self, v):
-        rot = torch.stack((
-            torch.stack((v[:, 0], v[:, 1]), dim=-1),
-            torch.stack((-v[:, 1], v[:, 0]), dim=-1),
-            torch.zeros(v.size(0), 2).type_as(v)
-        ), dim=-1)
-        return rot
-
-    def rot_img(self, x, rot):
-        grid = F.affine_grid(rot, x.size(), align_corners=False).type_as(x)
-        x = F.grid_sample(x, grid, align_corners=False)
-        return x
-
     def forward(self, x: torch.Tensor, v: torch.Tensor, rot_img=True):
         x = x.unsqueeze(-1).unsqueeze(-1)  # [bz, emb_dim, 1, 1]
         x = x.expand(-1, -1, 3, 3)
@@ -280,8 +269,8 @@ class InvEquiDecoder1(torch.nn.Module):
         x = torch.sigmoid(x)
 
         if rot_img:
-            rot = self.get_rotation_matrix(v)
-            x = self.rot_img(x, rot)
+            rot = get_rotation_matrix(v)
+            x = rot_img(x, rot)
         return x
 
 
@@ -340,19 +329,6 @@ class InvEquiDecoder2(torch.nn.Module):
             torch.nn.Conv2d(hidden_size, obs_shape[0], kernel_size=1, padding=0),
         )
 
-    def get_rotation_matrix(self, v):
-        rot = torch.stack((
-            torch.stack((v[:, 0], v[:, 1]), dim=-1),
-            torch.stack((-v[:, 1], v[:, 0]), dim=-1),
-            torch.zeros(v.size(0), 2).type_as(v)
-        ), dim=-1)
-        return rot
-
-    def rot_img(self, x, rot):
-        grid = F.affine_grid(rot, x.size(), align_corners=False).type_as(x)
-        x = F.grid_sample(x, grid, align_corners=False)
-        return x
-
     def forward(self, x: torch.Tensor, v: torch.Tensor, rot_img=True):
         x = self.linear(x)  # [bz, hidden_size*4*4]
         x = x.view(-1, self.hidden_size, 4, 4)  # [bz, hidden_size, 4, 4]
@@ -368,9 +344,24 @@ class InvEquiDecoder2(torch.nn.Module):
         x = torch.sigmoid(x)
 
         if rot_img:
-            rot = self.get_rotation_matrix(v)
-            x = self.rot_img(x, rot)
+            rot = get_rotation_matrix(v)
+            x = rot_img(x, rot)
         return x
+
+
+def get_rotation_matrix(v):
+    rot = torch.stack((
+        torch.stack((v[:, 0], v[:, 1]), dim=-1),
+        torch.stack((-v[:, 1], v[:, 0]), dim=-1),
+        torch.zeros(v.size(0), 2).type_as(v)
+    ), dim=-1)
+    return rot
+
+
+def rot_img(x, rot):
+    grid = F.affine_grid(rot, x.size(), align_corners=False).type_as(x)
+    x = F.grid_sample(x, grid, align_corners=False)
+    return x
 
 
 class Actor(nn.Module):
@@ -458,7 +449,8 @@ class InvEquiDrQV2Agent:
         task_name,
         aug_K,
         with_decoder,
-        decoder_type
+        decoder_type,
+        ssl
     ):
         self.device = device
         self.critic_target_tau = critic_target_tau
@@ -492,7 +484,8 @@ class InvEquiDrQV2Agent:
 
         # optimizers
         self.encoder_opt = torch.optim.Adam(self.encoder.parameters(), lr=lr)
-        self.decoder_opt = torch.optim.Adam(self.decoder.parameters(), lr=lr)
+        if with_decoder:
+            self.decoder_opt = torch.optim.Adam(self.decoder.parameters(), lr=lr)
         self.actor_opt = torch.optim.Adam(self.actor.parameters(), lr=lr)
         self.critic_opt = torch.optim.Adam(self.critic.parameters(), lr=lr)
 
@@ -508,6 +501,7 @@ class InvEquiDrQV2Agent:
 
         # self supervised loss
         self.with_decoder = with_decoder
+        self.ssl = ssl
 
         self.train()
         self.critic_target.train()
@@ -515,14 +509,16 @@ class InvEquiDrQV2Agent:
     def train(self, training=True):
         self.training = training
         self.encoder.train(training)
-        self.decoder.train(training)
+        if self.with_decoder:
+            self.decoder.train(training)
         self.actor.train(training)
         self.critic.train(training)
 
     def eval(self):
         self.training = False
         self.encoder.eval()
-        self.decoder.eval()
+        if self.with_decoder:
+            self.decoder.eval()
         self.actor.eval()
         self.critic.eval()
 
@@ -620,7 +616,7 @@ class InvEquiDrQV2Agent:
 
         loss = torch.nn.functional.mse_loss(y, obs / 255.0)
 
-        # optimize encoder and critic
+        # optimize encoder and decoder
         self.encoder_opt.zero_grad(set_to_none=True)
         self.decoder_opt.zero_grad(set_to_none=True)
 
@@ -630,6 +626,40 @@ class InvEquiDrQV2Agent:
 
         if self.use_tb:
             metrics["encoder_decoder_loss"] = loss.item()
+
+        return metrics
+
+    def update_encoder_ssl(self, obs):
+        metrics = dict()
+
+        feature = self.encoder(obs)
+        emb, v = feature[:, :self.encoder.out_dim], feature[:, self.encoder.out_dim:]
+
+        theta = torch.tensor(np.random.rand(obs.size(0)) * 360.0).float().to(self.device)
+        delta_v = torch.concat((torch.cos(theta).unsqueeze(1), torch.sin(theta).unsqueeze(1)), 1)
+        rot_matrix = torch.stack((
+            torch.stack((delta_v[:, 0], delta_v[:, 1]), dim=-1),
+            torch.stack((-delta_v[:, 1], delta_v[:, 0]), dim=-1)
+        ), dim=-1)
+
+        rot_v = torch.matmul(rot_matrix, v.unsqueeze(-1)).squeeze(-1)
+        rot_feature = torch.concat((emb, rot_v), dim=-1)
+
+        # target feature
+        with torch.no_grad():
+            rot = get_rotation_matrix(delta_v)
+            rot_obs = rot_img(obs, rot)
+            target_feature = self.encoder(rot_obs)
+
+        loss = torch.nn.functional.mse_loss(rot_feature, target_feature)
+
+        # optimize encoder
+        self.encoder_opt.zero_grad(set_to_none=True)
+        loss.backward()
+        self.encoder_opt.step()
+
+        if self.use_tb:
+            metrics["encoder_ssl"] = loss.item()
 
         return metrics
 
@@ -647,12 +677,12 @@ class InvEquiDrQV2Agent:
         action_all = []
         next_obs_all = []
         for k in range(self.aug_K):
-            obs_aug = self.shift_aug(obs.float())
-            next_obs_aug = self.shift_aug(next_obs.float())
+            obs_aug = self.shift_aug(obs.clone().float())
+            next_obs_aug = self.shift_aug(next_obs.clone().float())
             # encoder
             obs_all.append(self.encoder(obs_aug))
-            action_all.append(action)
             with torch.no_grad():
+                action_all.append(action)
                 next_obs_all.append(self.encoder(next_obs_aug))
 
         if self.use_tb:
@@ -671,11 +701,13 @@ class InvEquiDrQV2Agent:
             self.critic, self.critic_target, self.critic_target_tau
         )
 
-        # augment the obs for training the encoder, decoder
-        obs_rot_aug = self.rot_aug(obs.float())
-
         if self.with_decoder:
+            # augment the obs for training the encoder, decoder
+            obs_rot_aug = self.rot_aug(obs.clone().float())
             metrics.update(self.update_encoder_decoder(obs_rot_aug))
+
+        if self.ssl == 1:
+            metrics.update(self.update_encoder_ssl(obs.float()))
 
         # self.scaler.update()
 
@@ -688,14 +720,16 @@ class InvEquiDrQV2Agent:
 
         # model
         save_dict["agent.encoder"] = self.encoder.state_dict()
-        save_dict["agent.decoder"] = self.decoder.state_dict()
+        if self.with_decoder:
+            save_dict["agent.decoder"] = self.decoder.state_dict()
         save_dict["agent.actor"] = self.actor.state_dict()
         save_dict["agent.critic"] = self.critic.state_dict()
         save_dict["agent.critic_target"] = self.critic_target.state_dict()
 
         # optimizers
         save_dict["agent.encoder_opt"] = self.encoder_opt.state_dict()
-        save_dict["agent.decoder_opt"] = self.decoder_opt.state_dict()
+        if self.with_decoder:
+            save_dict["agent.decoder_opt"] = self.decoder_opt.state_dict()
         save_dict["agent.actor_opt"] = self.actor_opt.state_dict()
         save_dict["agent.critic_opt"] = self.critic_opt.state_dict()
 
@@ -710,19 +744,22 @@ class InvEquiDrQV2Agent:
 
         # model
         self.encoder.load_state_dict(state_dict["agent.encoder"])
-        self.decoder.load_state_dict(state_dict["agent.decoder"])
+        if self.with_decoder:
+            self.decoder.load_state_dict(state_dict["agent.decoder"])
         self.actor.load_state_dict(state_dict["agent.actor"])
         self.critic.load_state_dict(state_dict["agent.critic"])
         self.critic_target.load_state_dict(state_dict["agent.critic_target"])
 
         # optimizers
         self.encoder_opt.load_state_dict(state_dict["agent.encoder_opt"])
-        self.decoder_opt.load_state_dict(state_dict["agent.decoder_opt"])
+        if self.with_decoder:
+            self.decoder_opt.load_state_dict(state_dict["agent.decoder_opt"])
         self.actor_opt.load_state_dict(state_dict["agent.actor_opt"])
         self.critic_opt.load_state_dict(state_dict["agent.critic_opt"])
 
         self.encoder.to(self.device)
-        self.decoder.to(self.device)
+        if self.with_decoder:
+            self.decoder.to(self.device)
         self.actor.to(self.device)
         self.critic.to(self.device)
         self.critic_target.to(self.device)

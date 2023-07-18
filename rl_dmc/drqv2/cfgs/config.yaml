@@ -11,9 +11,13 @@ pooling: false
 # use the average target with K pairs of augmented samples
 aug_K: 1
 # use the self-supervised-loss
-with_decoder: true
+with_decoder: false
 # decoder architecture
 decoder_type: 1
+# self-supervised loss type
+# 0:no ssl
+# 1:with ssl
+ssl: 0
 ############# additional #############
 
 # task settings
