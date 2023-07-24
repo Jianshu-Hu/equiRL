@@ -41,6 +41,8 @@ def make_agent(obs_spec, action_spec, task, cfg):
                 cfg.agent,
                 task_name=cfg.task_name,
                 aug_K=cfg.aug_K,
+                group=cfg.group,
+                encoder_type=cfg.encoder_type,
                 with_decoder=cfg.with_decoder,
                 decoder_type=cfg.decoder_type,
                 ssl=cfg.ssl

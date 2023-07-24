@@ -65,34 +65,52 @@ def plot_several_folders(prefix, folders, action_repeat, label_list=[], plot_or_
 
 prefix = 'reacher_hard/'
 action_repeat = 2
-folders_1 = ['drq_shift', 'drq_rot', 'drq_flip', 'drq_flip_rot', 'drq_equi_flip', 'drq_equi_flip_rot', 'flipr2_edrq_shift']
-folders_2 = ['drq_without_pooling_shift', 'drq_without_pooling_flip',
-             'drq_without_pooling_rot', 'drq_without_pooling_flip_rot',
-             'flipr2_edrq_shift']
-folders_3 = ['drq_without_pooling_average_2_shift', 'drq_without_pooling_average_2_flip',
-             'drq_without_pooling_average_2_rot',
-             'drq_without_pooling_average_2_flip_rot',
-             'flipr2_edrq_shift']
-folders_4 = ['drq_without_pooling_flip', 'drq_without_pooling_average_2_flip', 'drq_without_pooling_flip_rot',
-             'drq_without_pooling_average_2_flip_rot',
-             'flipr2_edrq_shift']
-
-folders_1 = ['drq_without_pooling_shift', 'drq_inv_equi_without_decoder', 'drq_inv_equi_with_decoder',
-             'drq_inv_equi_with_decoder_detach_encoder']
+# folders_1 = ['drq_shift', 'drq_rot', 'drq_flip', 'drq_flip_rot', 'drq_equi_flip', 'drq_equi_flip_rot', 'flipr2_edrq_shift']
+# folders_2 = ['drq_without_pooling_shift', 'drq_without_pooling_flip',
+#              'drq_without_pooling_rot', 'drq_without_pooling_flip_rot',
+#              'flipr2_edrq_shift']
+# folders_3 = ['drq_without_pooling_average_2_shift', 'drq_without_pooling_average_2_flip',
+#              'drq_without_pooling_average_2_rot',
+#              'drq_without_pooling_average_2_flip_rot',
+#              'flipr2_edrq_shift']
+# folders_4 = ['drq_without_pooling_flip', 'drq_without_pooling_average_2_flip', 'drq_without_pooling_flip_rot',
+#              'drq_without_pooling_average_2_flip_rot',
+#              'flipr2_edrq_shift']
 
 # plot_several_folders(prefix, folders_1, action_repeat, title='reacher_hard_drq')
 # plot_several_folders(prefix, folders_2, action_repeat, title='reacher_hard_without_pooling_drq')
 # plot_several_folders(prefix, folders_3, action_repeat, title='reacher_hard_without_pooling_average_2_drq')
 # plot_several_folders(prefix, folders_4, action_repeat, title='reacher_hard_average_2_for_equi_drq')
 
-plot_several_folders(prefix, folders_1, action_repeat, title='reacher_hard_inv_equi_drq')
+# folders_1 = ['drq_without_pooling_shift', 'drq_inv_equi_without_decoder', 'drq_inv_equi_with_decoder',
+#              'drq_inv_equi_with_decoder_detach_encoder']
+# plot_several_folders(prefix, folders_1, action_repeat, title='reacher_hard_inv_equi_drq')
+
+# folders_1 = ['drq_without_pooling_shift', 'drq_D1_equi_encoder', 'drq_D1_equi_inv_encoder',
+#              'drq_D1_equi_inv_norm_encoder',
+#              'drq_D2_equi_encoder', 'drq_D2_equi_inv_encoder']
+folders_1 = ['drq_without_pooling_shift', 'drq_D1_inv_encoder', 'drq_D1_equi_encoder', 'drq_D2_inv_encoder',
+             'drq_D2_equi_encoder', 'drq_D2_inv_norm_encoder', 'drq_D4_inv_encoder', 'drq_D8_inv_encoder']
+plot_several_folders(prefix, folders_1, action_repeat, title='reacher_hard_encoder')
+
 
 prefix = 'cheetah_run/'
 action_repeat = 2
-folders_1 = ['drq_shift_batch_128', 'drq_inv_equi_without_decoder', 'drq_inv_equi_with_decoder', 'drq_inv_equi_with_decoder_detach_encoder']
-plot_several_folders(prefix, folders_1, action_repeat, title='cheetah_run_inv_equi_drq')
+# folders_1 = ['drq_shift_batch_128', 'drq_inv_equi_without_decoder', 'drq_inv_equi_with_decoder', 'drq_inv_equi_with_decoder_detach_encoder']
+# plot_several_folders(prefix, folders_1, action_repeat, title='cheetah_run_inv_equi_drq')
+
+# folders_1 = ['drq_shift', 'drq_D1_equi_encoder', 'drq_D1_equi_inv_encoder', 'drq_D1_equi_inv_norm_encoder',
+#              'drq_D2_equi_encoder', 'drq_D2_equi_inv_encoder']
+folders_1 = ['drq_shift', 'drq_D1_equi_encoder', 'drq_D1_inv_encoder', 'drq_D2_equi_encoder', 'drq_D2_inv_encoder']
+plot_several_folders(prefix, folders_1, action_repeat, title='cheetah_run_encoder')
 
 prefix = 'acrobot_swingup/'
 action_repeat = 2
-folders_1 = ['drq_shift', 'drq_inv_equi_without_decoder']
-plot_several_folders(prefix, folders_1, action_repeat, title='acrobot_swingup_inv_equi_drq')
+# folders_1 = ['drq_shift', 'drq_inv_equi_without_decoder']
+# plot_several_folders(prefix, folders_1, action_repeat, title='acrobot_swingup_inv_equi_drq')
+
+# folders_1 = ['drq_shift', 'drq_D1_equi_encoder', 'drq_D2_equi_encoder',
+#              'drq_D1_equi_inv_encoder', 'drq_D2_equi_inv_encoder', 'drq_D1_equi_inv_norm_encoder']
+folders_1 = ['drq_shift', 'drq_D1_equi_encoder', 'drq_D1_inv_encoder', 'drq_D2_equi_encoder', 'drq_D2_inv_encoder',
+             'drq_D4_equi_encoder', 'drq_D2_equi_norm_encoder']
+plot_several_folders(prefix, folders_1, action_repeat, title='acrobot_swingup_encoder')

@@ -10,7 +10,11 @@ data_aug: default #flip, rot, flip_rot
 pooling: false
 # use the average target with K pairs of augmented samples
 aug_K: 1
-# use the self-supervised-loss
+# group
+group: D1 #D1,Cn,Dn
+# encoder architecture
+encoder_type: 1
+# use decoder
 with_decoder: false
 # decoder architecture
 decoder_type: 1
