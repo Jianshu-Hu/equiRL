@@ -90,7 +90,8 @@ action_repeat = 2
 #              'drq_D1_equi_inv_norm_encoder',
 #              'drq_D2_equi_encoder', 'drq_D2_equi_inv_encoder']
 folders_1 = ['drq_without_pooling_shift', 'drq_D1_inv_encoder', 'drq_D1_equi_encoder', 'drq_D2_inv_encoder',
-             'drq_D2_equi_encoder', 'drq_D2_inv_norm_encoder', 'drq_D4_inv_encoder', 'drq_D8_inv_encoder']
+             'drq_D2_equi_encoder', 'drq_D2_inv_norm_encoder', 'drq_D4_inv_encoder', 'drq_D8_inv_encoder',
+             'drq_D1_equi_C4_inv_encoder']
 plot_several_folders(prefix, folders_1, action_repeat, title='reacher_hard_encoder')
 
 

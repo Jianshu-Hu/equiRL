@@ -10,8 +10,10 @@ data_aug: default #flip, rot, flip_rot
 pooling: false
 # use the average target with K pairs of augmented samples
 aug_K: 1
+# equigroup
+equi_group: D1 #D1,Cn,Dn,None
 # group
-group: D1 #D1,Cn,Dn
+inv_group: D1 #D1,Cn,Dn,None
 # encoder architecture
 encoder_type: 1
 # use decoder

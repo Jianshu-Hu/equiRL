@@ -38,6 +38,42 @@ class RandomShiftsAug(nn.Module):
         return F.grid_sample(x, grid, padding_mode="zeros", align_corners=False)
 
 
+class Encoder(nn.Module):
+    def __init__(self, obs_shape, hidden_dim, out_dim):
+        super().__init__()
+
+        assert len(obs_shape) == 3
+        self.repr_dim = out_dim * 7 * 7
+
+        self.convnet = nn.Sequential(
+            # 85x85
+            nn.Conv2d(obs_shape[0], hidden_dim, 3, stride=2),
+            nn.ReLU(),
+            # 42x42
+            nn.Conv2d(hidden_dim, hidden_dim, 3, stride=1),
+            nn.ReLU(),
+            # 40x40
+            nn.MaxPool2d(2),
+            # 20x20
+            nn.Conv2d(hidden_dim, hidden_dim, 3, stride=1),
+            nn.ReLU(),
+            # 18x18
+            nn.MaxPool2d(2),
+            # 9x9
+            nn.Conv2d(hidden_dim, out_dim, 3, stride=1),
+            nn.ReLU(),
+            # 7x7
+        )
+
+        self.apply(utils.weight_init)
+
+    def forward(self, obs):
+        obs = obs / 255.0 - 0.5
+        h = self.convnet(obs)
+        # h = h.view(h.shape[0], -1)
+        return h
+
+
 class EquiEncoder(nn.Module):
     def __init__(self, obs_shape, hidden_dim, out_dim, gspace):
         super().__init__()
@@ -88,9 +124,9 @@ class EquiEncoder(nn.Module):
             inp = obs
         inp = inp / 255.0 - 0.5
         inp = esnn.GeometricTensor(inp, self.in_type)
-        h = self.convnet(inp)
+        h = self.convnet(inp).tensor
 
-        h = h.tensor.view(h.shape[0], -1)
+        # h = h.tensor.view(h.shape[0], -1)
 
         return h
 
@@ -111,197 +147,10 @@ class InvEncoder(nn.Module):
             self.gspace, obs_shape[0] * [self.gspace.trivial_repr]
         )
 
-        self.hid_type = esnn.FieldType(self.gspace, hidden_dim * [self.gspace.trivial_repr])
-        self.out_type = esnn.FieldType(self.gspace, out_dim * [self.gspace.trivial_repr])
-
-        self.convnet = esnn.SequentialModule(
-            # 85x85
-            esnn.R2Conv(self.in_type, self.hid_type, 3, stride=2),
-            esnn.ReLU(self.hid_type),
-            # 42x42
-            esnn.R2Conv(self.hid_type, self.hid_type, 3, stride=1),
-            esnn.ReLU(self.hid_type),
-            # 40x40
-            esnn.PointwiseMaxPool(self.hid_type, 2),
-            # 20x20
-            esnn.R2Conv(self.hid_type, self.hid_type, 3, stride=1),
-            esnn.ReLU(self.hid_type),
-            # 18x18
-            esnn.PointwiseMaxPool(self.hid_type, 2),
-            # 9x9
-            esnn.R2Conv(self.hid_type, self.out_type, 3, stride=1),
-            esnn.ReLU(self.out_type),
-            # 7x7
-        )
-
-    def forward(self, obs):
-        # Need odd-sized inputs for stride=2 to preserve equivariance
-        if isinstance(obs, esnn.GeometricTensor):
-            inp = obs.tensor
-        else:
-            inp = obs
-        inp = inp / 255.0 - 0.5
-        inp = esnn.GeometricTensor(inp, self.in_type)
-        h = self.convnet(inp)
-
-        h = h.tensor.view(h.shape[0], -1)
-
-        return h
-
-
-class InvEquiEncoder(nn.Module):
-    def __init__(self, obs_shape, hidden_dim, out_dim, gspace):
-        super().__init__()
-
-        assert len(obs_shape) == 3
-
-        self.gspace = gspace
-        self.hidden_dim = hidden_dim
-        self.out_dim = out_dim
-
-        self.repr_dim = out_dim * 7 * 7 * (len(self.gspace.fibergroup.elements)+1)
-
-        self.in_type = esnn.FieldType(
-            self.gspace, obs_shape[0] * [self.gspace.trivial_repr]
-        )
-
-        self.hid_type = esnn.FieldType(self.gspace, hidden_dim * [self.gspace.regular_repr])\
-                        +esnn.FieldType(self.gspace, hidden_dim * [self.gspace.trivial_repr])
-        self.out_type = esnn.FieldType(self.gspace, out_dim * [self.gspace.regular_repr])\
-                        +esnn.FieldType(self.gspace, out_dim * [self.gspace.trivial_repr])
-
-        self.convnet = esnn.SequentialModule(
-            # 85x85
-            esnn.R2Conv(self.in_type, self.hid_type, 3, stride=2),
-            esnn.ReLU(self.hid_type),
-            # 42x42
-            esnn.R2Conv(self.hid_type, self.hid_type, 3, stride=1),
-            esnn.ReLU(self.hid_type),
-            # 40x40
-            esnn.PointwiseMaxPool(self.hid_type, 2),
-            # 20x20
-            esnn.R2Conv(self.hid_type, self.hid_type, 3, stride=1),
-            esnn.ReLU(self.hid_type),
-            # 18x18
-            esnn.PointwiseMaxPool(self.hid_type, 2),
-            # 9x9
-            esnn.R2Conv(self.hid_type, self.out_type, 3, stride=1),
-            esnn.ReLU(self.out_type),
-            # 7x7
-        )
-
-    def forward(self, obs):
-        # Need odd-sized inputs for stride=2 to preserve equivariance
-        if isinstance(obs, esnn.GeometricTensor):
-            inp = obs.tensor
-        else:
-            inp = obs
-        inp = inp / 255.0 - 0.5
-        inp = esnn.GeometricTensor(inp, self.in_type)
-        h = self.convnet(inp)
-
-        h = h.tensor.view(h.shape[0], -1)
-
-        return h
-
-
-class NormInvEncoder(nn.Module):
-    def __init__(self, obs_shape, hidden_dim, out_dim, gspace):
-        super().__init__()
-
-        assert len(obs_shape) == 3
-
-        self.gspace = gspace
-        self.hidden_dim = hidden_dim
-        self.out_dim = out_dim
-
-        self.repr_dim = out_dim * 7 * 7 * (1+1)
-
-        self.in_type = esnn.FieldType(
-            self.gspace, obs_shape[0] * [self.gspace.trivial_repr]
-        )
-
-        self.hid_type = esnn.FieldType(self.gspace, hidden_dim * [self.gspace.trivial_repr])
-        self.out_type = esnn.FieldType(self.gspace, out_dim * [self.gspace.trivial_repr])
-
-        self.inv_convnet = esnn.SequentialModule(
-            # 85x85
-            esnn.R2Conv(self.in_type, self.hid_type, 3, stride=2),
-            esnn.ReLU(self.hid_type),
-            # 42x42
-            esnn.R2Conv(self.hid_type, self.hid_type, 3, stride=1),
-            esnn.ReLU(self.hid_type),
-            # 40x40
-            esnn.PointwiseMaxPool(self.hid_type, 2),
-            # 20x20
-            esnn.R2Conv(self.hid_type, self.hid_type, 3, stride=1),
-            esnn.ReLU(self.hid_type),
-            # 18x18
-            esnn.PointwiseMaxPool(self.hid_type, 2),
-            # 9x9
-            esnn.R2Conv(self.hid_type, self.out_type, 3, stride=1),
-            esnn.ReLU(self.out_type),
-            # 7x7
-        )
-
-        self.norm_convnet = nn.Sequential(
-            # 85x85
-            nn.Conv2d(obs_shape[0], hidden_dim, 3, stride=2),
-            nn.ReLU(),
-            # 42x42
-            nn.Conv2d(hidden_dim, hidden_dim, 3, stride=1),
-            nn.ReLU(),
-            # 40x40
-            nn.MaxPool2d(2),
-            # 20x20
-            nn.Conv2d(hidden_dim, hidden_dim, 3, stride=1),
-            nn.ReLU(),
-            # 18x18
-            nn.MaxPool2d(2),
-            # 9x9
-            nn.Conv2d(hidden_dim, out_dim, 3, stride=1),
-            nn.ReLU(),
-            # 7x7
-        )
-
-    def forward(self, obs):
-        # Need odd-sized inputs for stride=2 to preserve equivariance
-        if isinstance(obs, esnn.GeometricTensor):
-            inp = obs.tensor
-        else:
-            inp = obs
-        inp = inp / 255.0 - 0.5
-        h_norm = self.norm_convnet(inp)
-        geo_inp = esnn.GeometricTensor(inp, self.in_type)
-        h_inv = self.inv_convnet(geo_inp)
-
-        h = torch.concat((h_norm, h_inv.tensor), dim=1)
-
-        h = h.view(h.shape[0], -1)
-
-        return h
-
-
-class NormEquiEncoder(nn.Module):
-    def __init__(self, obs_shape, hidden_dim, out_dim, gspace):
-        super().__init__()
-
-        assert len(obs_shape) == 3
-
-        self.gspace = gspace
-        self.hidden_dim = hidden_dim
-        self.out_dim = out_dim
-
-        self.repr_dim = out_dim * 7 * 7 * (len(self.gspace.fibergroup.elements)+1)
-
-        self.in_type = esnn.FieldType(
-            self.gspace, obs_shape[0] * [self.gspace.trivial_repr]
-        )
-
         self.hid_type = esnn.FieldType(self.gspace, hidden_dim * [self.gspace.regular_repr])
         self.out_type = esnn.FieldType(self.gspace, out_dim * [self.gspace.regular_repr])
 
-        self.equi_convnet = esnn.SequentialModule(
+        self.convnet = esnn.SequentialModule(
             # 85x85
             esnn.R2Conv(self.in_type, self.hid_type, 3, stride=2),
             esnn.ReLU(self.hid_type),
@@ -321,25 +170,10 @@ class NormEquiEncoder(nn.Module):
             # 7x7
         )
 
-        self.norm_convnet = nn.Sequential(
-            # 85x85
-            nn.Conv2d(obs_shape[0], hidden_dim, 3, stride=2),
-            nn.ReLU(),
-            # 42x42
-            nn.Conv2d(hidden_dim, hidden_dim, 3, stride=1),
-            nn.ReLU(),
-            # 40x40
-            nn.MaxPool2d(2),
-            # 20x20
-            nn.Conv2d(hidden_dim, hidden_dim, 3, stride=1),
-            nn.ReLU(),
-            # 18x18
-            nn.MaxPool2d(2),
-            # 9x9
-            nn.Conv2d(hidden_dim, out_dim, 3, stride=1),
-            nn.ReLU(),
-            # 7x7
-        )
+        self.gpool = esnn.GroupPooling(self.out_type)
+
+        # number of output channels
+        self.c = self.gpool.out_type.size
 
     def forward(self, obs):
         # Need odd-sized inputs for stride=2 to preserve equivariance
@@ -348,90 +182,61 @@ class NormEquiEncoder(nn.Module):
         else:
             inp = obs
         inp = inp / 255.0 - 0.5
-        h_norm = self.norm_convnet(inp)
-        geo_inp = esnn.GeometricTensor(inp, self.in_type)
-        h_equi = self.equi_convnet(geo_inp)
+        inp = esnn.GeometricTensor(inp, self.in_type)
+        h = self.convnet(inp)
+        h = self.gpool(h).tensor
 
-        h = torch.concat((h_norm, h_equi.tensor), dim=1)
-
-        h = h.view(h.shape[0], -1)
+        # h = h.tensor.view(h.shape[0], -1)
 
         return h
 
 
 class NormInvEquiEncoder(nn.Module):
-    def __init__(self, obs_shape, hidden_dim, out_dim, gspace):
+    def __init__(self, obs_shape, hidden_dim, out_dim, equi_gspace, inv_gspace, norm):
         super().__init__()
 
         assert len(obs_shape) == 3
 
-        self.gspace = gspace
+        self.equi_gspace = equi_gspace
+        self.inv_gspace = inv_gspace
+        self.norm = norm
         self.hidden_dim = hidden_dim
         self.out_dim = out_dim
 
-        self.repr_dim = out_dim * 7 * 7 * (len(self.gspace.fibergroup.elements)+1+1)
-
-        self.in_type = esnn.FieldType(
-            self.gspace, obs_shape[0] * [self.gspace.trivial_repr]
-        )
-
-        self.hid_type = esnn.FieldType(self.gspace, hidden_dim * [self.gspace.regular_repr])\
-                        +esnn.FieldType(self.gspace, hidden_dim * [self.gspace.trivial_repr])
-        self.out_type = esnn.FieldType(self.gspace, out_dim * [self.gspace.regular_repr])\
-                        +esnn.FieldType(self.gspace, out_dim * [self.gspace.trivial_repr])
-
-        self.inv_eq_convnet = esnn.SequentialModule(
-            # 85x85
-            esnn.R2Conv(self.in_type, self.hid_type, 3, stride=2),
-            esnn.ReLU(self.hid_type),
-            # 42x42
-            esnn.R2Conv(self.hid_type, self.hid_type, 3, stride=1),
-            esnn.ReLU(self.hid_type),
-            # 40x40
-            esnn.PointwiseMaxPool(self.hid_type, 2),
-            # 20x20
-            esnn.R2Conv(self.hid_type, self.hid_type, 3, stride=1),
-            esnn.ReLU(self.hid_type),
-            # 18x18
-            esnn.PointwiseMaxPool(self.hid_type, 2),
-            # 9x9
-            esnn.R2Conv(self.hid_type, self.out_type, 3, stride=1),
-            esnn.ReLU(self.out_type),
-            # 7x7
-        )
-
-        self.norm_convnet = nn.Sequential(
-            # 85x85
-            nn.Conv2d(obs_shape[0], hidden_dim, 3, stride=2),
-            nn.ReLU(),
-            # 42x42
-            nn.Conv2d(hidden_dim, hidden_dim, 3, stride=1),
-            nn.ReLU(),
-            # 40x40
-            nn.MaxPool2d(2),
-            # 20x20
-            nn.Conv2d(hidden_dim, hidden_dim, 3, stride=1),
-            nn.ReLU(),
-            # 18x18
-            nn.MaxPool2d(2),
-            # 9x9
-            nn.Conv2d(hidden_dim, out_dim, 3, stride=1),
-            nn.ReLU(),
-            # 7x7
-        )
+        channel = 0
+        if equi_gspace is not None:
+            # equivariant
+            channel += len(self.equi_gspace.fibergroup.elements)
+            self.equi_encoder = EquiEncoder(obs_shape=obs_shape, hidden_dim=hidden_dim, out_dim=out_dim,
+                                           gspace=equi_gspace)
+        if inv_gspace is not None:
+            # invariant
+            channel += 1
+            self.inv_encoder = InvEncoder(obs_shape=obs_shape, hidden_dim=hidden_dim, out_dim=out_dim,
+                                            gspace=inv_gspace)
+        if norm:
+            # add normal encoder
+            channel += 1
+            self.norm_encoder = Encoder(obs_shape=obs_shape, hidden_dim=hidden_dim, out_dim=out_dim)
+        self.repr_dim = out_dim * 7 * 7 * channel
 
     def forward(self, obs):
-        # Need odd-sized inputs for stride=2 to preserve equivariance
-        if isinstance(obs, esnn.GeometricTensor):
-            inp = obs.tensor
+        if self.inv_gspace is not None:
+            h_inv = self.inv_encoder(obs)
+            if self.equi_gspace is not None:
+                h_equi = self.equi_encoder(obs)
+                h_equi_inv = torch.concat((h_inv, h_equi), dim=1)
+            else:
+                h_equi_inv = h_inv
         else:
-            inp = obs
-        inp = inp / 255.0 - 0.5
-        h_norm = self.norm_convnet(inp)
-        geo_inp = esnn.GeometricTensor(inp, self.in_type)
-        h_inv_equi = self.inv_eq_convnet(geo_inp)
+            if self.equi_gspace is not None:
+                h_equi_inv = self.equi_encoder(obs)
 
-        h = torch.concat((h_norm, h_inv_equi.tensor), dim=1)
+        if self.norm:
+            h_norm = self.norm_encoder(obs)
+            h = torch.concat((h_norm, h_equi_inv), dim=1)
+        else:
+            h = h_equi_inv
 
         h = h.view(h.shape[0], -1)
 
@@ -848,7 +653,8 @@ class InvEquiDrQV2Agent:
         mixed_precision,
         task_name,
         aug_K,
-        group,
+        equi_group,
+        inv_group,
         encoder_type,
         with_decoder,
         decoder_type,
@@ -862,37 +668,33 @@ class InvEquiDrQV2Agent:
         self.stddev_schedule = stddev_schedule
         self.stddev_clip = stddev_clip
 
-        self.group = group
-        if self.group[0] == 'C':
-            gspace = gspaces.rot2dOnR2(N=int(group[1]))
-        elif self.group[0] == 'D':
-            gspace = gspaces.flipRot2dOnR2(N=int(group[1]))
+        self.equi_group = equi_group
+        self.inv_group = inv_group
+        if self.equi_group[0] == 'C':
+            equi_gspace = gspaces.rot2dOnR2(N=int(equi_group[1]))
+        elif self.equi_group[0] == 'D':
+            equi_gspace = gspaces.flipRot2dOnR2(N=int(equi_group[1]))
+        elif self.equi_group == 'None':
+            equi_gspace = None
+        if self.inv_group[0] == 'C':
+            inv_gspace = gspaces.rot2dOnR2(N=int(inv_group[1]))
+        elif self.inv_group[0] == 'D':
+            inv_gspace = gspaces.flipRot2dOnR2(N=int(inv_group[1]))
+        elif self.group == 'None':
+            equi_gspace = None
+
         # models
         if encoder_type == 1:
-            # equivariant encoder
-            self.encoder = EquiEncoder(obs_shape=obs_shape, hidden_dim=encoder_hidden_dim,
-                                       out_dim=encoder_out_dim, gspace=gspace).to(device)
-        elif encoder_type == 2:
-            # invariant encoder
-            self.encoder = InvEncoder(obs_shape=obs_shape, hidden_dim=encoder_hidden_dim,
-                                       out_dim=encoder_out_dim, gspace=gspace).to(device)
-        elif encoder_type == 3:
-            # normal+invariant encoder
-            self.encoder = NormInvEncoder(obs_shape=obs_shape, hidden_dim=encoder_hidden_dim,
-                                          out_dim=encoder_out_dim, gspace=gspace).to(device)
-        elif encoder_type == 4:
-            # normal+equivariant encoder
-            self.encoder = NormEquiEncoder(obs_shape=obs_shape, hidden_dim=encoder_hidden_dim,
-                                          out_dim=encoder_out_dim, gspace=gspace).to(device)
-        elif encoder_type == 5:
             # equivariant+invariant encoder
-            self.encoder = InvEquiEncoder(obs_shape=obs_shape, hidden_dim=encoder_hidden_dim,
-                                          out_dim=encoder_out_dim, gspace=gspace).to(device)
-        elif encoder_type == 6:
+            self.encoder = NormInvEquiEncoder(obs_shape=obs_shape, hidden_dim=encoder_hidden_dim,
+                                          out_dim=encoder_out_dim, equi_gspace=equi_gspace,  inv_gspace=inv_gspace,
+                                              norm=False).to(device)
+        elif encoder_type == 2:
             # equivariant+invariant+normal encoder
             self.encoder = NormInvEquiEncoder(obs_shape=obs_shape, hidden_dim=encoder_hidden_dim,
-                                       out_dim=encoder_out_dim, gspace=gspace).to(device)
-        elif encoder_type == 7:
+                                       out_dim=encoder_out_dim, equi_gspace=equi_gspace,  inv_gspace=inv_gspace,
+                                              norm=True).to(device)
+        elif encoder_type == 3:
             # invariant+rotation angle encoder
             self.encoder = InvEquiEncoder2(obs_shape=obs_shape, out_dim=encoder_out_dim,
                                            hidden_dim=encoder_hidden_dim).to(
